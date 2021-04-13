@@ -23,7 +23,7 @@ struct Player {
     // Координаты выстрелов:
     // true - был выстрел
     // false - не было выстрела
-    bool enemy_field[FIELD_SIZE][FIELD_SIZE];
+    bool shoots[FIELD_SIZE][FIELD_SIZE];
 
     // Координаты кораблей
     // true - есть корабль на клетке
@@ -36,76 +36,209 @@ struct Point {
 };
 
 Player player1 = {};
-const Player player2 = {};
+Player player2 = {};
+
+void show_arr(Player p) {
+    cout << endl;
+    for (int i = 0; i < FIELD_SIZE; i++) {
+        for (int j = 0; j < FIELD_SIZE; j++) {
+            cout << '\t' << p.own_field[i][j];
+        }
+        cout << endl;
+    }
+}
+
+bool is_need_divider_on_enemy_field(Player p, Player enemy, int row_num, int i) {
+    return (i == FIELD_SIZE - 1)
+        || ((enemy.own_field[row_num][i] && p.shoots[row_num][i]) && (!p.shoots[row_num][i + 1] || !enemy.own_field[row_num][i + 1]))
+        || ((enemy.own_field[row_num][i + 1] && p.shoots[row_num][i + 1]) && (!p.shoots[row_num][i] || !enemy.own_field[row_num][i]));
+}
 
 void draw_field_header() {
     cout << EMPTY_HOR_CELL;
     for (int i = 0; i < FIELD_SIZE - 1; i++) {
-        cout << TWO_SPACES << (char)(START_SYMBOL + i) << TWO_SPACES;
+        cout << TWO_SPACES << (char)(START_SYMBOL + i) << TWO_SPACES << " ";
     }
     cout << TWO_SPACES << "К" << TWO_SPACES;
 }
 
 void draw_top_border() {
     cout << EMPTY_HOR_CELL;
-    for (int i = 1; i <= FIELD_SIZE; i++) {
-        cout << "_____";
-    }
-}
-
-void draw_row_first_line(string str) {
-    cout << "    |";
     for (int i = 0; i < FIELD_SIZE; i++) {
-        cout << str;
+        if (i < FIELD_SIZE - 1) {
+            cout << "______";
+        }
+        else {
+            cout << "_____";
+        }
     }
-    cout << "|";
 }
 
-void draw_row_second_line(int num) {
-    cout << " " << num;
-    if (num < 10) {
+void draw_row_up_line(int row_num, Player p, Player enemy, bool is_own_field) {
+    cout << "    |";
+    if (is_own_field) {
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            cout << "     ";
+            if (i == FIELD_SIZE - 1 || p.own_field[row_num][i] != p.own_field[row_num][i + 1]) {
+                cout << "|";
+            }
+            else {
+                cout << " ";
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            cout << EMPTY_HOR_CELL;
+            if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                cout << "|";
+            }
+            else {
+                cout << " ";
+            }
+        }
+    }
+}
+
+void draw_row_bottom_line(int row_num, Player p, Player enemy, bool is_own_field) {
+    bool is_first_deck, is_middle_deck, is_last_deck;
+    cout << "    |";
+    if (is_own_field) {
+
+        // i - x - столбец
+        // row_num - y - строка
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            if (row_num == FIELD_SIZE - 1) {
+                if (i == FIELD_SIZE - 1 || p.own_field[row_num][i] != p.own_field[row_num][i + 1]) {
+                    cout << "_____|";
+                }
+                else {
+                    cout << "______";
+                }
+                continue;
+            }
+            if (p.own_field[row_num][i] != p.own_field[row_num + 1][i]) {
+                cout << "_____";
+            }
+            else {
+                cout << "     ";
+            }
+
+            if (i == FIELD_SIZE - 1 || p.own_field[row_num][i] != p.own_field[row_num][i + 1]) {
+                cout << "|";
+            }
+            else if ((p.own_field[row_num][i] && p.own_field[row_num][i + 1]) || (p.own_field[row_num + 1][i] && p.own_field[row_num + 1][i + 1])) {
+                cout << "_";
+            }
+            else {
+                cout << " ";
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            if (row_num == FIELD_SIZE - 1) {
+                if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                    cout << "_____|";
+                }
+                else {
+                    cout << "______";
+                }
+            }
+            else {
+                if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                    cout << "     |";
+                }
+                else {
+                    cout << "      ";
+                }
+            }
+            
+        }
+    }
+}
+
+void draw_row_middle_line(int row_num, Player p, Player enemy, bool is_own_field) {
+    cout << " " << row_num + 1;
+    if (row_num < FIELD_SIZE - 1) {
         cout << "  |";
     }
     else {
         cout << " |";
     }
 
-    for (int j = 0; j < FIELD_SIZE; j++) {
-        cout << TWO_SPACES << " " << TWO_SPACES;
+    if (is_own_field) {
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            if (p.own_field[row_num][i]) {
+                if (enemy.shoots[row_num][i]) {
+                    cout << "  X  ";
+                }
+                else {
+                    cout << "     ";
+                }
+            }
+            else {
+                if (enemy.shoots[row_num][i]) {
+                    cout << "  *  ";
+                }
+                else {
+                    cout << "     ";
+                }
+                
+            }
+
+            if (i == FIELD_SIZE - 1 || p.own_field[row_num][i] != p.own_field[row_num][i + 1]) {
+                cout << "|";
+            }
+            else {
+                cout << " ";
+            }
+        }
     }
-    cout << "|";
+    else {
+        for (int i = 0; i < FIELD_SIZE; i++) {
+            if (!p.shoots[row_num][i]) {
+                cout << EMPTY_HOR_CELL;
+            }
+            else {
+                if (enemy.own_field[row_num][i]) {
+                    cout << "  X  ";
+                }
+                else {
+                    cout << "  *  ";
+                }
+            }
+            
+            if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                cout << "|";
+            }
+            else {
+                cout << " ";
+            }
+        }
+    }
 }
 
-void draw_row(int num) {
+void draw_row(int num, Player p, Player enemy) {
     // Первая системная строка
-    draw_row_first_line(EMPTY_HOR_CELL);
+    draw_row_up_line(num, p, enemy, true);
     cout << EMPTY_HOR_CELL;
-    draw_row_first_line(EMPTY_HOR_CELL);
+    draw_row_up_line(num, p, enemy, false);
     cout << endl;
     // Вторая системная строка
-    draw_row_second_line(num);
+    draw_row_middle_line(num, p, enemy, true);
     cout << EMPTY_HOR_CELL;
-    draw_row_second_line(num);
+    draw_row_middle_line(num, p, enemy, false);
     cout << endl;
     // Третья системная строка
 
-    if (num < FIELD_SIZE) {
-        draw_row_first_line(EMPTY_HOR_CELL);
-    }
-    else {
-        draw_row_first_line("_____");
-    }
+    draw_row_bottom_line(num, p, enemy, true);
     cout << EMPTY_HOR_CELL;
-    if (num < FIELD_SIZE) {
-        draw_row_first_line(EMPTY_HOR_CELL);
-    }
-    else {
-        draw_row_first_line("_____");
-    }
+    draw_row_bottom_line(num, p, enemy, false);
     cout << endl;
 }
 
-void show_field() {
+void show_field(Player p, Player enemy) {
     system("cls");
     // Выводим буквы столбцов первого поля
     draw_field_header();
@@ -125,8 +258,8 @@ void show_field() {
     // 1. Пустая строка - для визуального отделения символа от верхнего разделителя.
     // 2. Строка с символами.
     // 3. Строка - вертикальный разделитель: в ней содержатся символы подчеркивания для вертикального разделения клеток.
-    for (int i = 1; i <= FIELD_SIZE; i++) {
-        draw_row(i);
+    for (int i = 0; i < FIELD_SIZE; i++) {
+        draw_row(i, p, enemy);
     }
 }
 
@@ -201,14 +334,14 @@ bool is_coords_valid(bool field[FIELD_SIZE][FIELD_SIZE], int x, int y, int direc
 }
 
 bool is_ship_coords_valid(bool field[FIELD_SIZE][FIELD_SIZE], Point p1, Point p2) {
-    if (p1.x < -1 || p1.x > FIELD_SIZE
-        || p1.y < -1 || p1.y > FIELD_SIZE
-        || p2.x < -1 || p2.x > FIELD_SIZE
-        || p2.y < -1 || p2.y > FIELD_SIZE) return false;
+    if (p1.x < 0 || p1.x > FIELD_SIZE
+        || p1.y < 0 || p1.y > FIELD_SIZE
+        || p2.x < 0 || p2.x > FIELD_SIZE
+        || p2.y < 0 || p2.y > FIELD_SIZE) return false;
     
-    for (int i = p1.x; i <= p2.x && i > 0 && i < FIELD_SIZE - 1; i++) {
-        for (int j = p1.y; j <= p2.y && j > 0 && j < FIELD_SIZE - 1; j++) {
-            if (field[i][j]) return false;
+    for (int i = p1.x; i <= p2.x && i < FIELD_SIZE; i++) {
+        for (int j = p1.y; j <= p2.y && j < FIELD_SIZE; j++) {
+            if (field[j][i]) return false;
         }
     }
     return true;
@@ -218,7 +351,7 @@ void clear_player(Player p) {
     for (int i = 0; i < FIELD_SIZE; i++) {
         for (int j = 0; j < FIELD_SIZE; j++) {
             p.own_field[i][j] = false;
-            p.enemy_field[i][j] = false;
+            p.shoots[i][j] = false;
         }
     }
 }
@@ -242,8 +375,8 @@ void set_ships_auto(Player &p) {
                 // 1 - вертикальное (сверху вниз);
                 dir = rand() % 2;
 
-                p1.x = x - 1;
-                p1.y = y - 1;
+                p1.x = x > 0 ? x - 1 : x;
+                p1.y = y > 0 ? y - 1 : y;
                 
                 if (dir == 0) {
                     p2.x = x + i;
@@ -256,43 +389,25 @@ void set_ships_auto(Player &p) {
             } while (!is_ship_coords_valid(p.own_field, p1, p2));
             for (int k = 0; k < i; k++) {
                 if (dir == 0) {
-                    p.own_field[x + k][y] = true;
+                    p.own_field[y][x + k] = true;
                 }
                 else {
-                    p.own_field[x][y + k] = true;
+                    p.own_field[y + k][x] = true;
                 }
             }
-            
-            // рассчет координат палуб
-            //for (int k = 0; k < i; k++) {
-            //    do {
-            //        if (k == 0) {
-            //            x = rand() % FIELD_SIZE;
-            //            y = rand() % FIELD_SIZE;
-            //            if (i > 1) {
-            //                if (x == 0) {
-            //                    if (y == 0) dir = rand() % 2 + 1;
-            //                    else if (y == FIELD_SIZE - 1) dir = rand() % 2;
-            //                    else dir = rand() % 3
-            //                }
-            //                else if (x == FIELD_SIZE - 1) {
-            //                    if (y == 0) dir = rand() % 2 + 1;
-            //                    if (y == FIELD_SIZE - 1) dir = rand() % 2;
-            //                }
-            //            }
-            //            else {
-            //                dir = 0;
-            //            }
-            //            
-            //            dir = i > 1 ? rand() % 4 : 0;
-            //        }
-            //        else {
-            //            
-            //        }
-            //        
-            //    } while (!is_coords_valid(p.own_field, x, y, dir, k));
-            //    p.own_field[x][y] = true;
-            //}
+        }
+    }
+}
+
+void test_data() {
+    for (int i = 0; i < FIELD_SIZE; i++) {
+        for (int j = 0; j < FIELD_SIZE; j++) {
+            if (rand() % 2) {
+                player2.shoots[i][j] = true;
+            }
+            else {
+                player2.shoots[i][j] = false;
+            }
         }
     }
 }
@@ -310,18 +425,9 @@ int main()
 {
     setlocale(LC_CTYPE, "Russian");
     srand(time(NULL));
+    test_data();
     set_ships_auto(player1);
-    show_menu();
-    //show_field();
+    //show_menu();
+    show_field(player1, player2);
+    show_arr(player1);
 }
-
-// Запуск программы: CTRL+F5 или меню "Отладка" > "Запуск без отладки"
-// Отладка программы: F5 или меню "Отладка" > "Запустить отладку"
-
-// Советы по началу работы 
-//   1. В окне обозревателя решений можно добавлять файлы и управлять ими.
-//   2. В окне Team Explorer можно подключиться к системе управления версиями.
-//   3. В окне "Выходные данные" можно просматривать выходные данные сборки и другие сообщения.
-//   4. В окне "Список ошибок" можно просматривать ошибки.
-//   5. Последовательно выберите пункты меню "Проект" > "Добавить новый элемент", чтобы создать файлы кода, или "Проект" > "Добавить существующий элемент", чтобы добавить в проект существующие файлы кода.
-//   6. Чтобы снова открыть этот проект позже, выберите пункты меню "Файл" > "Открыть" > "Проект" и выберите SLN-файл.
