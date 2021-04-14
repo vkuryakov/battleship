@@ -101,12 +101,9 @@ void draw_row_up_line(int row_num, Player p, Player enemy, bool is_own_field) {
 }
 
 void draw_row_bottom_line(int row_num, Player p, Player enemy, bool is_own_field) {
-    bool is_first_deck, is_middle_deck, is_last_deck;
     cout << "    |";
     if (is_own_field) {
 
-        // i - x - столбец
-        // row_num - y - строка
         for (int i = 0; i < FIELD_SIZE; i++) {
             if (row_num == FIELD_SIZE - 1) {
                 if (i == FIELD_SIZE - 1 || p.own_field[row_num][i] != p.own_field[row_num][i + 1]) {
@@ -138,11 +135,28 @@ void draw_row_bottom_line(int row_num, Player p, Player enemy, bool is_own_field
     else {
         for (int i = 0; i < FIELD_SIZE; i++) {
             if (row_num == FIELD_SIZE - 1) {
-                if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
-                    cout << "_____|";
+                cout << "_____";
+                if ((i == FIELD_SIZE - 1) || is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                    cout << "|";
                 }
                 else {
-                    cout << "______";
+                    cout << "_";
+                }
+
+                continue;
+            }
+            if ((p.shoots[row_num][i] && enemy.own_field[row_num][i] && (!p.shoots[row_num + 1][i] || !enemy.own_field[row_num + 1][i]))
+                || (p.shoots[row_num + 1][i] && enemy.own_field[row_num + 1][i] && (!p.shoots[row_num][i] || !enemy.own_field[row_num][i]))) {
+                cout << "_____";
+                if (is_need_divider_on_enemy_field(p, enemy, row_num, i)) {
+                    cout << "|";
+                }
+                else if ((p.shoots[row_num][i] && p.shoots[row_num][i + 1] && enemy.own_field[row_num][i] && enemy.own_field[row_num][i + 1])
+                    || (p.shoots[row_num + 1][i] && p.shoots[row_num + 1][i + 1] && enemy.own_field[row_num + 1][i] && enemy.own_field[row_num + 1][i + 1])) {
+                    cout << "_";
+                }
+                else {
+                    cout << " ";
                 }
             }
             else {
@@ -408,6 +422,13 @@ void test_data() {
             else {
                 player2.shoots[i][j] = false;
             }
+
+            if (rand() % 2) {
+                player1.shoots[i][j] = true;
+            }
+            else {
+                player1.shoots[i][j] = false;
+            }
         }
     }
 }
@@ -425,8 +446,16 @@ int main()
 {
     setlocale(LC_CTYPE, "Russian");
     srand(time(NULL));
+
+    HWND console = GetConsoleWindow();
+    RECT ConsoleRect;
+    GetWindowRect(console, &ConsoleRect);
+
+    MoveWindow(console, ConsoleRect.left, ConsoleRect.top, 1200, 900, TRUE);
+
     test_data();
     set_ships_auto(player1);
+    set_ships_auto(player2);
     //show_menu();
     show_field(player1, player2);
     show_arr(player1);
