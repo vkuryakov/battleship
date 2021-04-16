@@ -63,6 +63,7 @@ struct Point {
 void show_menu();
 void set_ships_auto(Player& p);
 bool is_ship_coords_valid(bool field[FIELD_SIZE][FIELD_SIZE], Point p1, Point p2);
+bool is_ship_destroyed(Player player, Player enemy, Point point);
 
 void show_arr(Player p) {
     cout << endl;
@@ -304,25 +305,27 @@ void show_field(Player p, Player enemy) {
 }
 
 void show_computer_difficulty_dialog() {
-    int input_var;
-    do {
+    char input_var;
+    while (true) {
         system("cls");
         cout << "\t\tМорской бой." << endl;
         cout << "1. Легкий" << (computer_mode == 0 ? ".\t+" : ".") << endl;
         cout << "2. Сложный" << (computer_mode == 1 ? ".\t+" : ".") << endl;
         cout << "0. Назад." << endl;
-        cin >> input_var;
+        input_var = _getch();
+        if (input_var == '0') break;
         switch (input_var) {
-            case 1:
+            case '1':
                 computer_mode = 0;
                 break;
-            case 2:
+            case '2':
                 computer_mode = 1;
                 break;
             default:
                 break;
         }
-    } while (input_var != 0);
+    }
+
     show_menu();
 }
 
@@ -368,28 +371,147 @@ Point input_coords_to_point(char* input) {
     return point;
 }
 
-Point get_shoot_point(Player p) {
+Point get_random_shoot(Player p) {
+    Point point;
+    do {
+        point.x = rand() % 10;
+        point.y = rand() % 10;
+    } while (p.shoots[point.y][point.x]);
+    return point;
+}
+
+// Анализ полей и поиск координат, где вероятней всего располагается палуба какого-либо вражеского корабля.
+Point smart_shoot(Player comp, Player enemy) {
+    int multiplier_direction, counter;
+    // Этап 1. Поиск уже раненого корабля.
+    Point deck_of_injured_ship;
+    bool injured_ship_found = false;
+    for (int i = 0; i < FIELD_SIZE && !injured_ship_found; i++) {
+        for (int j = 0; j < FIELD_SIZE && !injured_ship_found; j++) {
+            if (enemy.own_field[i][j] && comp.shoots[i][j] && !is_ship_destroyed(enemy, comp, { j,i })) {
+                deck_of_injured_ship.x = j;
+                deck_of_injured_ship.y = i;
+                injured_ship_found = true;
+            }
+        }
+    }
+    // Если найден подбитый корабль
+    if (injured_ship_found) {
+        // Попытка найти вторую подбитую палубу для определения направления корабля.
+        // Если нестреляных полей больше одного - выбираем случайным образом.
+        if ((deck_of_injured_ship.x > 0 && comp.shoots[deck_of_injured_ship.y][deck_of_injured_ship.x - 1] && enemy.own_field[deck_of_injured_ship.y][deck_of_injured_ship.x - 1])
+            || (deck_of_injured_ship.x < FIELD_SIZE - 1 && comp.shoots[deck_of_injured_ship.y][deck_of_injured_ship.x + 1] && enemy.own_field[deck_of_injured_ship.y][deck_of_injured_ship.x + 1])) {
+            // Горизонтальное расположение корабля
+            multiplier_direction = rand() % 2 == 0 ? -1 : 1;
+            counter = deck_of_injured_ship.x + (1 * multiplier_direction);
+            while(true) {
+                if (counter < 0
+                    || counter == FIELD_SIZE 
+                    || (comp.shoots[deck_of_injured_ship.y][counter] && !enemy.own_field[deck_of_injured_ship.y][counter])) {
+                    // Если дошли до края поля или в это поле уже стреляли и промахнулись - меняем направление
+                    multiplier_direction *= -1;
+                    counter = deck_of_injured_ship.x + (1 * multiplier_direction);
+                }
+                if (!comp.shoots[deck_of_injured_ship.y][counter]) {
+                    return { counter, deck_of_injured_ship.y };
+                }
+                else {
+                    counter += (1 * multiplier_direction);
+                }
+            };
+        }
+        else if ((deck_of_injured_ship.y > 0 && comp.shoots[deck_of_injured_ship.y - 1][deck_of_injured_ship.x] && enemy.own_field[deck_of_injured_ship.y - 1][deck_of_injured_ship.x])
+            || (deck_of_injured_ship.y < FIELD_SIZE - 1 && comp.shoots[deck_of_injured_ship.y + 1][deck_of_injured_ship.x] && enemy.own_field[deck_of_injured_ship.y + 1][deck_of_injured_ship.x])) {
+            // Вертикальное расположение корабля
+            multiplier_direction = rand() % 2 == 0 ? -1 : 1;
+            counter = deck_of_injured_ship.y + (1 * multiplier_direction);
+            while (true) {
+                if (counter < 0
+                    || counter == FIELD_SIZE
+                    || (comp.shoots[counter][deck_of_injured_ship.x] && !enemy.own_field[counter][deck_of_injured_ship.x])) {
+                    // Если дошли до края поля или в это поле уже стреляли и промахнулись - меняем направление
+                    multiplier_direction *= -1;
+                    counter = deck_of_injured_ship.y + (1 * multiplier_direction);
+                }
+                if (!comp.shoots[counter][deck_of_injured_ship.x]) {
+                    return { deck_of_injured_ship.x, counter };
+                }
+                else {
+                    counter += (1 * multiplier_direction);
+                }
+            };
+        }
+        else {
+            // Подбита только одна палуба
+            // 0 - верх, 1 - право, 2 - низ, 3 - лево
+            multiplier_direction = rand() % 4;
+            while (true) {
+                if (multiplier_direction == 0)
+                {
+                    if (deck_of_injured_ship.y > 0 && !comp.shoots[deck_of_injured_ship.y - 1][deck_of_injured_ship.x]) {
+                        // Если направление вверх и в этом направлении есть нестреляная клетка - возвращаем ее
+                        return { deck_of_injured_ship.x, deck_of_injured_ship.y - 1 };
+                    }
+                    // иначе - меняем направление по часовой стрелке и продолжаем искать
+                    multiplier_direction++;
+                }
+
+                if (multiplier_direction == 1)
+                {
+                    if (deck_of_injured_ship.x < FIELD_SIZE - 1 && !comp.shoots[deck_of_injured_ship.y][deck_of_injured_ship.x + 1]) {
+                        // Если направление вправо и в этом направлении есть нестреляная клетка - возвращаем ее
+                        return { deck_of_injured_ship.x + 1, deck_of_injured_ship.y };
+                    }
+                    // иначе - меняем направление по часовой стрелке и продолжаем искать
+                    multiplier_direction++;
+                }
+
+                if (multiplier_direction == 2)
+                {
+                    if (deck_of_injured_ship.y < FIELD_SIZE - 1 && !comp.shoots[deck_of_injured_ship.y + 1][deck_of_injured_ship.x]) {
+                        // Если направление вниз и в этом направлении есть нестреляная клетка - возвращаем ее
+                        return { deck_of_injured_ship.x, deck_of_injured_ship.y + 1 };
+                    }
+                    // иначе - меняем направление по часовой стрелке и продолжаем искать
+                    multiplier_direction++;
+                }
+
+                if (multiplier_direction == 3)
+                {
+                    if (deck_of_injured_ship.x > 0 && !comp.shoots[deck_of_injured_ship.y][deck_of_injured_ship.x - 1]) {
+                        // Если направление вправо и в этом направлении есть нестреляная клетка - возвращаем ее
+                        return { deck_of_injured_ship.x - 1, deck_of_injured_ship.y };
+                    }
+                    // иначе - меняем направление по часовой стрелке и продолжаем искать
+                    multiplier_direction = 0;
+                }
+            }
+        }
+    }
+
+    return get_random_shoot(comp);
+}
+
+Point get_shoot_point(Player p, Player enemy) {
     Point point;
     char input_point[4];
     
     if (p.is_comp) {
         if (computer_mode == 0) {
-            do {
-                point.x = rand() % 10;
-                point.y = rand() % 10;
-            } while (p.shoots[point.y][point.x]);
+            point = get_random_shoot(p);
         }
         else {
-
+            point = smart_shoot(p, enemy);
         }
     }
     else {
-        do {
+        while (true) {
             cout << "Введите координаты выстрела: ";
             cin >> input_point;
             point = input_coords_to_point(input_point);
             if (point.x == -1) cout << "Недопустимые координаты. Попробуйте еще раз." << endl;
-        } while (point.x < 0);
+            else break;
+        }
     }
     return point;
 }
@@ -397,8 +519,6 @@ Point get_shoot_point(Player p) {
 bool is_ship_destroyed(Player player, Player enemy, Point point) {
     // Чтобы выяснить уничтожен ли корабль, ищем в 4 направлениях живые палубы
     // Разработаны 2 алгоритма
-    int counter = point.x - 1;
-
 
     // Первый алгоритм: смотрим сразу в 4 направления и ищем живые палубы.
     // Негативный момент: приходится проверять много лишних пустых клеток.
@@ -417,35 +537,77 @@ bool is_ship_destroyed(Player player, Player enemy, Point point) {
 
     // Второй алгоритм: поочереди смотрим в разные стороны
     // По сравнению с первым алгоритмом каждый цикл будет заканчиваться на пустой клетке или на границе поля.
-    while (counter > 0 && counter < FIELD_SIZE && player.own_field[counter][point.y]) {
-        if (!enemy.shoots[counter--][point.y]) return false;
+    int counter = point.x - 1;
+    while (counter >= 0 && counter < FIELD_SIZE && player.own_field[point.y][counter]) {
+        if (!enemy.shoots[point.y][counter--]) return false;
     }
     counter = point.x + 1;
-    while (counter > 0 && counter < FIELD_SIZE && player.own_field[counter][point.y]) {
-        if (!enemy.shoots[counter++][point.y]) return false;
+    while (counter >= 0 && counter < FIELD_SIZE && player.own_field[point.y][counter]) {
+        if (!enemy.shoots[point.y][counter++]) return false;
     }
     counter = point.y + 1;
-    while (counter > 0 && counter < FIELD_SIZE && player.own_field[point.x][counter]) {
-        if (!enemy.shoots[point.x][counter++]) return false;
+    while (counter >= 0 && counter < FIELD_SIZE && player.own_field[counter][point.x]) {
+        if (!enemy.shoots[counter++][point.x]) return false;
     }
     counter = point.y - 1;
-    while (counter > 0 && counter < FIELD_SIZE && player.own_field[point.x][counter]) {
-        if (!enemy.shoots[point.x][counter--]) return false;
+    while (counter >= 0 && counter < FIELD_SIZE && player.own_field[counter][point.x]) {
+        if (!enemy.shoots[counter--][point.x]) return false;
     }
     return true;
+}
+
+// Функция делает "залп воинских почестей", снаряды которого падают в каждую клетку вокруг
+// погибшего корабля. Подразумевается, что в клетке point находится последняя подбитая палуба
+// корабля.
+void military_honors(Player &player, Player enemy, Point point) {
+    Point first_deck = point, last_deck = point;
+    int counter = point.x - 1;
+    while (counter >= 0 && counter < FIELD_SIZE && enemy.own_field[point.y][counter]) {
+        counter--;
+        first_deck.x--;
+    }
+    counter = point.x + 1;
+    while (counter >= 0 && counter < FIELD_SIZE && enemy.own_field[point.y][counter]) {
+        counter++;
+        last_deck.x++;
+    }
+    counter = point.y + 1;
+    while (counter >= 0 && counter < FIELD_SIZE && enemy.own_field[counter][point.x]) {
+        counter++;
+        last_deck.y++;
+    }
+    counter = point.y - 1;
+    while (counter >= 0 && counter < FIELD_SIZE && enemy.own_field[counter][point.x]) {
+        counter--;
+        first_deck.y--;
+    }
+
+    // Корректировка координат залпа для более удобного и безопасного цикла.
+    if (first_deck.x > 0) first_deck.x--;
+    if (first_deck.y > 0) first_deck.y--;
+    if (last_deck.x < FIELD_SIZE) last_deck.x++;
+    if (last_deck.y < FIELD_SIZE) last_deck.y++;
+
+    for (int i = first_deck.y; i <= last_deck.y; i++) {
+        for (int j = first_deck.x; j <= last_deck.x; j++) {
+            if (i < 0 || i >= FIELD_SIZE || j < 0 || j >= FIELD_SIZE) {
+                continue;
+            }
+            player.shoots[i][j] = true;
+        }
+    }
 }
 
 void run_game(Player p1, Player p2) {
     char input;
     Player* current_p = &p1, *enemy = &p2, *tmp;
     bool is_destroyed;
-
     while (!is_game_over(p1, p2)) {
         // Если играет человек, мы должны показать ему поле перед ходом
-        if (game_mode == 0) {
+        if (game_mode == 0 && !(*current_p).is_comp) {
             show_field(p1, p2);
         }
-        Point shoot = get_shoot_point(*current_p);
+        Point shoot = get_shoot_point(*current_p, *enemy);
         (*current_p).shoots[shoot.y][shoot.x] = true;
         // Показываем поле после выстрела
         // Если играют 2 компьютера, чередуем отображение полей, чтобы видно было поля обоих компьютеров.
@@ -457,10 +619,13 @@ void run_game(Player p1, Player p2) {
             show_field(*current_p, *enemy);
         }
         cout << "Ходит " << (*current_p).name << endl;
-        cout << "Выстрел по координатам: " << (char)SYMBOLS_CODES[shoot.y][0] << shoot.x + 1 << endl;
-        if ((*enemy).own_field[shoot.x][shoot.y]) {
+        cout << "Выстрел по координатам: " << (char)SYMBOLS_CODES[shoot.x][0] << shoot.y + 1 << endl;
+        if ((*enemy).own_field[shoot.y][shoot.x]) {
             is_destroyed = is_ship_destroyed(*enemy, *current_p, shoot);
             cout << "Попадание: корабль " << (is_destroyed ? "уничтожен" : "ранен");
+            // Сложный компьютер окружает уничтоженные корабли полями с состоянием "мимо",
+            // чтобы в будущем не тратить ход на гарантированный промах
+            if (is_destroyed && (*current_p).is_comp && computer_mode == 1) military_honors(*current_p, *enemy, shoot);
         }
         else {
             cout << "Промах";
@@ -468,12 +633,16 @@ void run_game(Player p1, Player p2) {
             current_p = enemy;
             enemy = tmp;
         }
-        cout << endl << "Нажмите любую клавишу чтобы продолжить или Q для возврата в главное меню...";
+
+        if (!is_game_over(p1, p2)) {
+            cout << endl << "Нажмите любую клавишу чтобы продолжить или Q для возврата в главное меню...";
+        }
+        else break;
         input = _getch();
         if (input == 'Q' || input == 'q') return;
     }
 
-    cout << "Игра окончена. Победил " << (is_player_has_ships(*current_p) ? (*current_p).name : (*enemy).name)
+    cout << endl << "Игра окончена. Победил " << (is_player_has_ships(*current_p) ? (*current_p).name : (*enemy).name)
         << endl
         << "Нажмите любую клавишу для возврата в главное меню...";
     _getch();
@@ -490,7 +659,7 @@ void run_human_vs_comp() {
     int ships;
 
     do {
-        cout << "Заполнить поле автоматически (Y/N): ";
+        cout << endl << "Заполнить поле автоматически (Y/N): ";
         is_automatic_fill = _getch();
     } while (is_automatic_fill != 'Y' && is_automatic_fill != 'y' && is_automatic_fill != 'N' && is_automatic_fill != 'n');
     if (is_automatic_fill == 'Y' || is_automatic_fill == 'y') {
@@ -522,25 +691,26 @@ void run_human_vs_comp() {
                         
                             cout << "В какую сторону расположить корабль?" << endl
                                 << "1. Вправо." << endl
-                                << "2. Влево." << endl;
+                                << "2. Вниз." << endl;
                         do {
                             tmp_input = _getch();
                         } while (tmp_input != '1' && tmp_input != '2');
                         if (tmp_input == '1') {
-                            for (int j = 0; j < i; j++) p1.own_field[point.x][point.y + j] = true;
+                            for (int j = 0; j <= i; j++) p1.own_field[point.y][point.x + j] = true;
                         }
                         else {
-                            for (int j = 0; j < i; j++) p1.own_field[point.x + j][point.y] = true;
+                            for (int j = 0; j <= i; j++) p1.own_field[point.y + j][point.x] = true;
                         }
                     }
                     else if (is_horizontal_available) {
-                        for (int j = 0; j < i; j++) p1.own_field[point.x][point.y + j] = true;
+                        for (int j = 0; j <= i; j++) p1.own_field[point.y][point.x + j] = true;
                     }
                     else if (is_vertical_available) {
-                        for (int j = 0; j < i; j++) p1.own_field[point.x + j][point.y] = true;
+                        for (int j = 0; j <= i; j++) p1.own_field[point.y + j][point.x] = true;
                     }
                     else {
                         cout << "По этим координатам невозможно поставить корабль. Попробуйте еще раз." << endl;
+                        _getch();
                         continue;
                     }
                     
@@ -548,9 +718,10 @@ void run_human_vs_comp() {
                 else {
                     if (!is_ship_coords_valid(p1.own_field, point, point)) {
                         cout << "По этим координатам невозможно поставить корабль. Попробуйте еще раз." << endl;
+                        _getch();
                         continue;
                     }
-                    p1.own_field[point.x][point.y] = true;
+                    p1.own_field[point.y][point.x] = true;
                 }
 
                 ships--;
@@ -572,55 +743,33 @@ void run_comp_vs_comp() {
 }
 
 void show_menu() {
-    int input_var;
-    do {
+    char input_var;
+    while (true) {
         system("cls");
         cout << "\tМорской бой." << endl;
         cout << "1. Человек против компьютера." << endl;
         cout << "2. Компьютер против компьютера." << endl;
         cout << "3. Установить сложность компьютера." << endl;
         cout << "0. Выход." << endl;
-        cin >> input_var;
-    } while (input_var < 0 || input_var > 3);
-    switch (input_var) {
-        case 0: 
+        input_var = _getch();
+        if (input_var == '0') {
             exit_game = true;
-            break;
-        case 1:
-            run_human_vs_comp();
-            break;
-        case 2:
-            run_comp_vs_comp();
-            break;
-        case 3:
-            show_computer_difficulty_dialog();
-            break;
-        default:
-            break;
-    }
-}
-
-bool is_coords_valid(bool field[FIELD_SIZE][FIELD_SIZE], int x, int y, int direction, int deck) {
-    if (field[x][y]) return false;
-    int x_cur, y_cur;
-    for (int i = -1; i < 2; i++) {
-        x_cur = x + i;
-        if (x_cur < 0 || x_cur > FIELD_SIZE) continue;
-        for (int j = -1; j < 2; j++) {
-            if (i == 0 && j == 0) continue;
-            if (deck > 0 
-                && ((direction == 0 && i == -1 && j == 0)
-                    || (direction == 1 && i == 0 && j == 1)
-                    || (direction == 2 && i == 1 && j == 0)
-                    || (direction == 3 && i == 0 && j == -1))) {
-                continue;
-            }
-            
-            y_cur = y + i;
-            if (field[x_cur][y_cur]) return false;
+            return;
+        }
+        switch (input_var) {
+            case '1':
+                run_human_vs_comp();
+                break;
+            case '2':
+                run_comp_vs_comp();
+                break;
+            case '3':
+                show_computer_difficulty_dialog();
+                break;
+            default:
+                break;
         }
     }
-    return true;
 }
 
 bool is_ship_coords_valid(bool field[FIELD_SIZE][FIELD_SIZE], Point p1, Point p2) {
